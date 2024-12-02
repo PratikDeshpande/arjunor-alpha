@@ -8,12 +8,16 @@ Experimental Redis Drop In Database
 
 Compile:
 ```
-cd src
-g++ server.cpp -o server
+make
 ```
 
 Run:
 ```
-./server
+./arjunor-alpha-server
+```
+
+Clean:
+```
+make clean
 ```
 
