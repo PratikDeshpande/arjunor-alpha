@@ -1,29 +1,25 @@
-#include <iostream>
-#include <getopt.h>
+#include <netdb.h> // struct addrinfo, getaddrinfo, gai_strerror, freeaddrinfo
 #include <unistd.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <errno.h>
+#include <sys/socket.h> // socket, setsockopt, bind, accept, sockaddr_storage, socklen_t, address families constants
+#include <string.h> // memset
+#include <arpa/inet.h>  // inet_ntop
 #include <sys/types.h>
-#include <netinet/in.h>
-#include <netdb.h>
-#include <sys/wait.h>
-#include <signal.h>
+#include <netinet/in.h> // INET6_ADDRSTRLEN
+#include <stdio.h>  // fprintf, perror
+#include <stdlib.h> // exit
 
 #define PORT "7379"
 #define BACKLOG 10
 
 // TODO: Use Modern Logging library (ie boost, google, etc)
 // TODO: Configurable log levels
-// TODO: Use smart pointers | RAII
+// TODO: Use smart pointers | RAII (make sure all resources [memory, file handles, sockets, etc are owned by an object and returned to os])
 // TODO: Retrieve port, backlog, etc from command line flags OR config OR DEFAULT
 // TODO: Support more than one client connection
 // TODO: Add unit tests for IPv6 logic
-
+// TODO: Make this cross platform (Windows)
+// TODO: Find best practices for mixing C style Errors and C++ style Exceptions
+// TODO: Create class for synchronous TCP Server
 int main(void) {
     printf("Starting ArjunorDB\n");
     int concurrent_clients = 0;
@@ -76,15 +72,14 @@ int main(void) {
     }
 
     printf("server: waiting for connections...\n");
-    char buffer[1024] = {0};
-
 
     struct sockaddr_storage their_addr; // Type used to encapsulate address info for both IPv4 and IPv6 sockets. Inter castable pointer with sockaddr*
     socklen_t sin_size;
     char incoming_connection_details[INET6_ADDRSTRLEN]; // TODO: Rename these variables to relect function
-    
+    char buffer[1024] = {0};
     // tcp server loop
     while(1) {
+        printf("loop start. about to accept connections...\n");
         sin_size = sizeof their_addr;
         new_fd = accept(sockfd, (struct sockaddr *) &their_addr, &sin_size);
         if (new_fd == -1) {
@@ -110,24 +105,38 @@ int main(void) {
         printf("incoming IP connection details: %s\n", incoming_connection_details);
         printf("number of clients is now %i\n", concurrent_clients);
 
-        int valread = 0;
+        // for loop for client session
+        while(1) {
+            // Read from client. blocking call
+            int valread = recv(new_fd, buffer, 1024, 0); // read 1024 characters in each loop
+            printf("bytes received: %i\n", valread);
+            if (valread <= 0) {
 
-        do {
-            // Read from client
-            valread = read(new_fd, buffer, 1024); // read 1024 characters in each loop
+                // TODO: Only break loop on IO/Termination error
+                close(new_fd);
+                concurrent_clients--;
+                printf("client session with address %s disconnected\n", incoming_connection_details);
+                break;
+            }
             printf("Received %s\n", buffer);
 
-            // TODO: Fix Improper termination
+            // TODO: Decode Bufer
 
-        } while (valread > 0);
+            // clear buffer after decoding message
+            memset(&buffer, 0, sizeof buffer);
 
-        // Clear buffer?
-        memset(buffer, 0, 1024);
-        concurrent_clients--;
-        printf("client session with address %s terminated\n", incoming_connection_details);
+            // TODO: Process message and send response
+            // Placeholder error message to send to redis cli
+            // Placeholder Bulk Error Message Format: '!<length>\r\n<error>\r\n'
+            char placeholder_error_message[] = "!4\r\nTEST\r\n";
 
 
-        close(new_fd);
+            int send_response = send(new_fd, placeholder_error_message, 10, 0);
+            printf("bytes sent: %i\n", send_response);
+            if (send_response <= 0) {
+                printf("error ending bytes");
+            } 
+        };
     }
 
     return 0;
