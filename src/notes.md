@@ -98,3 +98,123 @@ struct sockaddr_storage
 
 * Designed to be large enough to hold both IPv4 and IPv6 structures.
 * When filling out `struct sockaddr`, cast sockaddr_stroage to type that is needed
+
+
+## Memory Leaks
+
+This was the valgrind output after receiving a ping message from nc:
+
+
+```
+Valgrind output (after accepting one nc ping message, then CNTRL+C):
+
+==57895== 
+==57895== Process terminating with default action of signal 2 (SIGINT)
+==57895==    at 0x4994427: accept (accept.c:26)
+==57895==    by 0x1096B0: main (server.cpp:84)
+==57895== 
+==57895== HEAP SUMMARY:
+==57895==     in use at exit: 2,584 bytes in 2 blocks
+==57895==   total heap usage: 7 allocs, 5 frees, 7,412 bytes allocated
+==57895== 
+==57895== LEAK SUMMARY:
+==57895==    definitely lost: 0 bytes in 0 blocks
+==57895==    indirectly lost: 0 bytes in 0 blocks
+==57895==      possibly lost: 0 bytes in 0 blocks
+==57895==    still reachable: 2,584 bytes in 2 blocks
+==57895==         suppressed: 0 bytes in 0 blocks
+==57895== Reachable blocks (those to which a pointer was found) are not shown.
+==57895== To see them, rerun with: --leak-check=full --show-leak-kinds=all
+==57895== 
+==57895== For lists of detected and suppressed errors, rerun with: -s
+==57895== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+
+```
+
+Will likely need to have logic to shut down server, free memory, close sockets, and create crash dump when server is killed
+Look up signals API
+
+```
+#include <signal.h>
+
+void sig_handler(int s) {
+    if (s == SIGINT) {
+        printf("\nTerminating Server...\n");
+    }
+    exit(s);
+}
+
+int main() {
+
+  // Register signal and signal handler
+  signal(SIGINT, sig_handler);
+
+  return 0;
+}
+```
+
+
+#### Dependencies
+
+Need to keep track of dependency libraries installed for this project
+
+Currently Google test is the only one: libgtest-dev
+
+`sudo apt-get install libgtest-dev`
+
+Alternative approach used: Building Google Test from source:
+
+https://github.com/google/googletest
+
+Built as a standalone CMake project:
+
+```
+git clone https://github.com/google/googletest.git -b v1.15.2
+cd googletest        # Main directory of the cloned repository.
+mkdir build          # Create a directory to hold the build output.
+cd build
+cmake ..             # Generate native build scripts for GoogleTest.
+```
+Then once the build scripts are generated:
+
+```
+make
+sudo make install    # Install in /usr/local/ by default
+```
+
+This installs the google test libraries in /usr/local (gtest.pc is also added)
+
+Now you can import GTEST. This is the sample code (from AI):
+
+```
+#include <gtest/gtest.h>
+#include <stdexcept>
+
+void divide(int a, int b, int& result) {
+    if (b==0) {
+        throw std::runtime_error("Division by zero");
+    }
+    result = a/b;
+}
+
+TEST(DivisionTest, TestDivisionByZero) {
+    int result;
+    EXPECT_THROW(divide(10, 0, result), std::runtime_error);
+}
+
+int main() {
+    ::testing::InitGoogleTest();
+    return RUN_ALL_TESTS();
+}
+```
+
+To compile the code and link it with Google Test library:
+
+https://stackoverflow.com/questions/15813723/how-do-i-set-up-google-test-with-a-gnu-make-project
+
+```
+g++ -I h -pthread -o test_response tests/test_response.cpp /usr/local/lib/libgtest.a 
+```
+
+TODO: Learn what all those other options mean
+TODO: See if you can incorporate a build system where you can build the files from source and add the libraries (ie libgtest.a, libgtest_main.a, libgmock.a, libgmock_main.a in the compiler options using must Makefile)
