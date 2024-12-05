@@ -16,6 +16,12 @@ Run:
 ./arjunor-alpha-server
 ```
 
+Test:
+```
+make test
+./test
+```
+
 Clean:
 ```
 make clean
