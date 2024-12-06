@@ -218,3 +218,62 @@ g++ -I h -pthread -o test_response tests/test_response.cpp /usr/local/lib/libgte
 
 TODO: Learn what all those other options mean
 TODO: See if you can incorporate a build system where you can build the files from source and add the libraries (ie libgtest.a, libgtest_main.a, libgmock.a, libgmock_main.a in the compiler options using must Makefile)
+
+
+######  Common Response Interface for parsed data
+
+Problem 1:
+
+functions that parse byte data (read_*) can return data in many different types (stirng, int_64, array, etc). Decoding a large stream of bytes representing arrays containing different data types will require calling these functions compositionally.
+
+What C++ language feature can we use for this?
+
+Ideas on top of my head:
+
+1. Union 
+
+https://learn.microsoft.com/en-us/cpp/cpp/unions?view=msvc-170
+
+The MSFT C++ doc recommends that std::variant is a type-safe alternative
+
+
+2. Modern typesafe version: std::variant
+
+Solution:
+
+Struct that represents protocol message will have a data field that is a variant of the types of data used and an enum type that represents the type of data in the message (which can later be used for type narrowing when reading the variant):
+
+```
+enum ProtocolMessageType { SimpleString, SimpleError, Integer, BulkString, Array, Null, Boolean, Double, BigNumber, BulkError, VerbatimString, Map, Attribute, Set, Push };
+struct ProtocolMessage {
+    ProtocolMessageType protocol_message_type;
+    std::variant<std::string, int64_t, std::vector<std::shared_ptr<ProtocolMessage>>> data;
+};
+
+```
+
+std::variant can support vectors of ProtocolMessage as well. 
+
+Problem 2: When you instantiate a struct or object in a function that is supposed to be composible and used by other functions, you need to manage the pointer and memory. You can't instantiate an object and then pass it outside scope (dangling?)
+
+Solution: Smart pointers
+
+3 types:
+
+1. unique pointer
+
+- only one function (or rather one scope) owns the object referenced by this pointer. Will be cleared when out of scope
+
+
+2. shared pointer
+
+- used when object needs to be shared between different scopes (ie functions that perform some composable operation that need to hand off the object to another function without worrying about memory allocation).
+
+- memory freed when all functions using it go out of scope. requires another byte to keep track of references
+
+
+3. weak pointer
+
+- in conjunction with shared ptr. provides access to oject owned by shared ptr instances, but does not contribute to reference counting.
+
+TODO: read more on weak pointers later
