@@ -8,7 +8,7 @@
 // TODO: Find a common response interface/type that represents a union of all types returned by read_* functions
 //  so that byte streams can be processed in a chain / (ie composition)
 //  Possible options: response struct, union struct, etc
-namespace response {
+namespace resp {
 
     enum ProtocolMessageType { SimpleString, SimpleError, Integer, BulkString, Array, Null, Boolean, Double, BigNumber, BulkError, VerbatimString, Map, Attribute, Set, Push };
     struct ProtocolMessage {
@@ -30,7 +30,7 @@ namespace response {
 
     std::pair<std::shared_ptr<ProtocolMessage>, int> decode_one(const std::vector<std::byte>& buffer);
 
-    std::shared_ptr<ProtocolMessage> decode(const std::vector<std::byte>& buffer);
+    std::pair<std::shared_ptr<ProtocolMessage>, int> decode(const std::vector<std::byte>& buffer);
 
 
 
