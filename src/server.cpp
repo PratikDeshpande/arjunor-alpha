@@ -10,14 +10,16 @@
 #include <cstddef> // std::byte
 #include <iostream>
 #include "resp.h" // needs to be added to VSCode include path to be part of intellisense. Also needs to be defined as a target in Makefile
+#include "eval.h" // needs to be added to VSCode include path to be part of intellisense. Also needs to be defined as a target in Makefile
 #include <vector>
+#include <sstream>
 
 #define PORT "7379"
 #define BACKLOG 10
 
 
 // Read from client. This is a blocking system call
-std::vector<std::byte> read_command(int new_fd) {
+std::shared_ptr<cmd::RedisCommand> read_command(int new_fd) {
     std::byte buffer[512]; // TODO: If bigger than 512 bytes, loop until you read EOF. Clear memory?
     auto bytes_read = recv(new_fd, buffer, 512, 0);
     printf("bytes received: %li\n", bytes_read);
@@ -27,16 +29,68 @@ std::vector<std::byte> read_command(int new_fd) {
     }
     std::vector<std::byte> command(buffer, buffer + bytes_read);
     memset(&buffer, 0, sizeof buffer);
-    return command;
-    // TODO: when the function scope ends, what happens to the buffer? Does it get deallocated?
+    std::string command_string(reinterpret_cast<const char*>(command.data()), command.size());
+    std::cout << "Incoming command: " << command_string << std::endl;
+
+    // TODO: Extract to helper function
+    auto protocol_message = resp::decode(command).first;
+    if (protocol_message->protocol_message_type != resp::ProtocolMessageType::Array) {
+        std::cout << "Error: Expected Array type" << std::endl;
+        throw std::invalid_argument("Error: Expected Array type");
+    }
+    auto data = protocol_message->data;
+    auto vectors = std::get<std::vector<std::shared_ptr<resp::ProtocolMessage>>>(data);
+    if (vectors.size() == 0) {
+        std::cout << "Error: Expected at least one element in array" << std::endl;
+        throw std::invalid_argument("Error: Expected at least one element in array");
+    }
+    for (auto vec: vectors) {
+        if (vec->protocol_message_type != resp::ProtocolMessageType::BulkString) {
+            std::cout << "Error: Expected BulkString type" << std::endl;
+            throw std::invalid_argument("Error: Expected BulkString type");
+        }
+        std::cout << "bulk string result: " << std::get<std::string>(vec->data) << std::endl;
+    }
+    auto command_name = std::get<std::string>(vectors[0]->data);
+    cmd::CommandName command_name_enum;
+    // TODO: extract to helper function to convert string to enum
+    if (command_name == "PING") {
+        command_name_enum = cmd::CommandName::Ping;
+    } else {
+        std::cout << "Error: Unknown command" << std::endl;
+        throw std::invalid_argument("Error: Unknown command");
+    }
+
+    std::vector<std::string> arguments;
+    for(int i = 1; i < vectors.size(); i++) {
+        arguments.push_back(std::get<std::string>(vectors[i]->data));
+    }
+    std::shared_ptr<cmd::RedisCommand> result = std::make_shared<cmd::RedisCommand>();
+    result->name = command_name_enum;
+    result->arguments = arguments;
+    return result;
 }
 
-void send_command(int new_fd, std::vector<std::byte> command) {
-    auto bytes_sent = send(new_fd, command.data(), command.size(), 0);
+void send_error(int new_fd, std::string error_message) {
+    std::ostringstream error_message_stream;
+    error_message_stream << "-" << error_message << "\r\n";
+    std::string response = error_message_stream.str();
+
+
+    auto char_string = response.c_str();
+    auto byte_string = (std::byte*)char_string;
+    printf("error message size: %li\n", response.size());
+    auto bytes_sent = send(new_fd, byte_string, response.size(), 0);
     printf("bytes sent: %li\n", bytes_sent);
-    if (bytes_sent <= 0) {
-        std::cout << "Error sending bytes" << std::endl;
-        throw std::invalid_argument("Error sending bytes");
+}
+
+void send_command(int new_fd, std::shared_ptr<cmd::RedisCommand> command) {
+    try {
+        eval::eval_and_respond(command, new_fd);
+    } catch (std::invalid_argument& e) {
+        auto error_message = std::string(e.what());
+        printf("Error sending command: %s\n", e.what());
+        send_error(new_fd, error_message);
     }
 }
 
@@ -135,7 +189,7 @@ int main(void) {
 
         // for loop for client session
         while(1) {
-            std::vector<std::byte> command;
+            std::shared_ptr<cmd::RedisCommand> command;
             try {
                 command = read_command(new_fd);
             } catch (std::invalid_argument& e) {
@@ -145,14 +199,7 @@ int main(void) {
                 printf("client session with address %s disconnected\n", incoming_connection_details);
                 break; // TODO: only break if its EOF character read
             }
-            std::string command_string(reinterpret_cast<const char*>(command.data()), command.size());
-            std::cout << "Incoming command: " << command_string << std::endl;
-
-            try {
-                send_command(new_fd, command);
-            } catch (std::invalid_argument& e) {
-                printf("Error sending command: %s\n", e.what());
-            }
+            send_command(new_fd, command);
         };
     }
 
