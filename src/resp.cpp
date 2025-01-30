@@ -1,7 +1,7 @@
-#include "response.h"
+#include "resp.h"
 #include <iostream>
 
-namespace response {
+namespace resp {
 
 std::byte carriage_return_character = static_cast<std::byte>('\r');
 std::byte zero_decimal_character = static_cast<std::byte>('0');;
@@ -119,5 +119,14 @@ std::pair<std::shared_ptr<ProtocolMessage>, int> decode_one(const std::vector<st
         std::cout << "Error: Unrecognized Symbol" << std::endl;
         throw std::invalid_argument("Error: Unrecognized Symbol");
     }
+}
+
+std::pair<std::shared_ptr<ProtocolMessage>, int> decode(const std::vector<std::byte>& buffer) {
+    if (buffer.size() == 0) {
+        std::cout << "Error: No Data in buffer" << std::endl;
+        throw std::invalid_argument("Error: No Data in buffer"); // TODO: This may not need to be a thrown error if we iteratively reach this point
+    }
+    auto result = decode_one(buffer);
+    return result;
 }
 }
