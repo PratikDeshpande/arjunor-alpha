@@ -7,9 +7,38 @@
 #include <netinet/in.h> // INET6_ADDRSTRLEN
 #include <stdio.h>  // fprintf, perror
 #include <stdlib.h> // exit
+#include <cstddef> // std::byte
+#include <iostream>
+#include "resp.h" // needs to be added to VSCode include path to be part of intellisense. Also needs to be defined as a target in Makefile
+#include <vector>
 
 #define PORT "7379"
 #define BACKLOG 10
+
+
+// Read from client. This is a blocking system call
+std::vector<std::byte> read_command(int new_fd) {
+    std::byte buffer[512]; // TODO: If bigger than 512 bytes, loop until you read EOF. Clear memory?
+    auto bytes_read = recv(new_fd, buffer, 512, 0);
+    printf("bytes received: %li\n", bytes_read);
+    if (bytes_read <= 0) {
+        std::cout << "Error reading incoming bytes" << std::endl;
+        throw std::invalid_argument("Error: No data in buffer");
+    }
+    std::vector<std::byte> command(buffer, buffer + bytes_read);
+    memset(&buffer, 0, sizeof buffer);
+    return command;
+    // TODO: when the function scope ends, what happens to the buffer? Does it get deallocated?
+}
+
+void send_command(int new_fd, std::vector<std::byte> command) {
+    auto bytes_sent = send(new_fd, command.data(), command.size(), 0);
+    printf("bytes sent: %li\n", bytes_sent);
+    if (bytes_sent <= 0) {
+        std::cout << "Error sending bytes" << std::endl;
+        throw std::invalid_argument("Error sending bytes");
+    }
+}
 
 // TODO: Use Modern Logging library (ie boost, google, etc)
 // TODO: Configurable log levels
@@ -76,7 +105,6 @@ int main(void) {
     struct sockaddr_storage their_addr; // Type used to encapsulate address info for both IPv4 and IPv6 sockets. Inter castable pointer with sockaddr*
     socklen_t sin_size;
     char incoming_connection_details[INET6_ADDRSTRLEN]; // TODO: Rename these variables to relect function
-    char buffer[1024] = {0};
     // tcp server loop
     while(1) {
         printf("loop start. about to accept connections...\n");
@@ -107,35 +135,24 @@ int main(void) {
 
         // for loop for client session
         while(1) {
-            // Read from client. blocking call
-            int valread = recv(new_fd, buffer, 1024, 0); // read 1024 characters in each loop
-            printf("bytes received: %i\n", valread);
-            if (valread <= 0) {
-
-                // TODO: Only break loop on IO/Termination error
+            std::vector<std::byte> command;
+            try {
+                command = read_command(new_fd);
+            } catch (std::invalid_argument& e) {
+                printf("Error reading command: %s\n", e.what());
                 close(new_fd);
                 concurrent_clients--;
                 printf("client session with address %s disconnected\n", incoming_connection_details);
-                break;
+                break; // TODO: only break if its EOF character read
             }
-            printf("Received %s\n", buffer);
+            std::string command_string(reinterpret_cast<const char*>(command.data()), command.size());
+            std::cout << "Incoming command: " << command_string << std::endl;
 
-            // TODO: Decode Bufer
-
-            // clear buffer after decoding message
-            memset(&buffer, 0, sizeof buffer);
-
-            // TODO: Process message and send response
-            // Placeholder error message to send to redis cli
-            // Placeholder Bulk Error Message Format: '!<length>\r\n<error>\r\n'
-            char placeholder_error_message[] = "!4\r\nTEST\r\n";
-
-
-            int send_response = send(new_fd, placeholder_error_message, 10, 0);
-            printf("bytes sent: %i\n", send_response);
-            if (send_response <= 0) {
-                printf("error ending bytes");
-            } 
+            try {
+                send_command(new_fd, command);
+            } catch (std::invalid_argument& e) {
+                printf("Error sending command: %s\n", e.what());
+            }
         };
     }
 
