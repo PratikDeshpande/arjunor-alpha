@@ -277,3 +277,83 @@ Solution: Smart pointers
 - in conjunction with shared ptr. provides access to oject owned by shared ptr instances, but does not contribute to reference counting.
 
 TODO: read more on weak pointers later
+
+
+EPOLL Notes:
+
+https://man7.org/linux/man-pages/man7/epoll.7.html
+
+https://en.wikipedia.org/wiki/Epoll
+
+epoll is a linux kernal call used to monitor multiple file descriptors (ie sockets)
+
+1. Use epoll_create1 to create an epoll object
+
+2. use epoll_ctl to add file descripters to be "watched" in the epoll object (register)
+
+3. use epoll_wait (blocking call) to wait for events on the file descriptors registered with the epoll object created in [1]
+
+
+Triggering modes: Edge triggered and Level Triggered
+
+Sample Code (form Linux Man Pages):
+```
+#define MAX_EVENTS 10
+           struct epoll_event ev, events[MAX_EVENTS];
+           int listen_sock, conn_sock, nfds, epollfd;
+
+           /* Code to set up listening socket, 'listen_sock',
+              (socket(), bind(), listen()) omitted. */
+
+            // Step 1: Create epoll object
+           epollfd = epoll_create1(0);
+           if (epollfd == -1) {
+               perror("epoll_create1");
+               exit(EXIT_FAILURE);
+           }
+
+            // Step 2: Register your server's socket fd with epoll object to listen for events
+           ev.events = EPOLLIN;
+           ev.data.fd = listen_sock;
+           if (epoll_ctl(epollfd, EPOLL_CTL_ADD, listen_sock, &ev) == -1) {
+               perror("epoll_ctl: listen_sock");
+               exit(EXIT_FAILURE);
+           }
+
+           for (;;) {
+                // Step 3: blocking epoll_wait call for events on any of the registered file descriptors in epoll object
+               nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
+               if (nfds == -1) {
+                   perror("epoll_wait");
+                   exit(EXIT_FAILURE);
+               }
+
+                // Process all the events returned by epoll_wait
+               for (n = 0; n < nfds; ++n) {
+                    // If the events are on your server's socket (ie new connection request)
+                    // accept connection, set new connection's socket file descriptor to non blocking, and register it 
+                    // with your epoll object form step 1 
+                   if (events[n].data.fd == listen_sock) {
+                       conn_sock = accept(listen_sock,
+                                          (struct sockaddr *) &addr, &addrlen);
+                       if (conn_sock == -1) {
+                           perror("accept");
+                           exit(EXIT_FAILURE);
+                       }
+                       setnonblocking(conn_sock);
+                       ev.events = EPOLLIN | EPOLLET;
+                       ev.data.fd = conn_sock;
+                       if (epoll_ctl(epollfd, EPOLL_CTL_ADD, conn_sock,
+                                   &ev) == -1) {
+                           perror("epoll_ctl: conn_sock");
+                           exit(EXIT_FAILURE);
+                       }
+                   } else {
+                        // if the events are on one of the other client's socket file descriptors (ie they have sent data),
+                        // process that data
+                       do_use_fd(events[n].data.fd);
+                   }
+               }
+           }
+
+```
