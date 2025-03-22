@@ -13,10 +13,12 @@
 #include "eval.h" // needs to be added to VSCode include path to be part of intellisense. Also needs to be defined as a target in Makefile
 #include <vector>
 #include <sstream>
-#include <thread>
+#include <sys/epoll.h>
+#include <fcntl.h>
 
 #define PORT "7379"
 #define BACKLOG 10
+#define MAX_CLIENTS 20000
 
 
 // Read from client. This is a blocking system call
@@ -95,20 +97,17 @@ void send_command(int new_fd, std::shared_ptr<cmd::RedisCommand> command) {
     }
 }
 
-// This function is called in a new thread for each client connection
 void handle_client_request(int new_fd, char* incoming_connection_details) {
-    while(1) {
-        std::shared_ptr<cmd::RedisCommand> command;
-        try {
-            command = read_command(new_fd);
-        } catch (std::invalid_argument& e) {
-            printf("Error reading command: %s\n", e.what());
-            close(new_fd);
-            printf("client session with address %s disconnected\n", incoming_connection_details);
-            break; // TODO: only break if its EOF character read
-        }
-        send_command(new_fd, command);
+    std::shared_ptr<cmd::RedisCommand> command;
+    try {
+        command = read_command(new_fd);
+    } catch (std::invalid_argument& e) {
+        printf("Error reading command: %s\n", e.what());
+        close(new_fd);
+        printf("client session with address %s disconnected\n", incoming_connection_details);
+        return;
     }
+    send_command(new_fd, command);
 }
 
 // TODO: Use Modern Logging library (ie boost, google, etc)
@@ -123,7 +122,7 @@ void handle_client_request(int new_fd, char* incoming_connection_details) {
 int main(void) {
     printf("Starting ArjunorDB\n");
 
-    int sockfd, new_fd;
+    int server_socket_fd;
     struct addrinfo hints, *servinfo, *p;
 
     memset(&hints, 0, sizeof hints); // TODO: Use smart pointer to allocate and release
@@ -139,18 +138,18 @@ int main(void) {
     }
 
     for(p = servinfo; p != NULL; p = p->ai_next) {  // TODO: use modern iterator
-        if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
+        if ((server_socket_fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
             perror("server: socket");
             continue;
         }
 
-        if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &socker_reuse_addr_flag, sizeof(int)) == -1) {
+        if (setsockopt(server_socket_fd, SOL_SOCKET, SO_REUSEADDR, &socker_reuse_addr_flag, sizeof(int)) == -1) {
             perror("setsockopt");
             exit(1);
         }
 
-        if (bind(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
-            close(sockfd);
+        if (bind(server_socket_fd, p->ai_addr, p->ai_addrlen) == -1) {
+            close(server_socket_fd);
             perror("server: bind");
             continue;
         }
@@ -165,8 +164,22 @@ int main(void) {
         exit(1);
     }
 
-    if (listen(sockfd, BACKLOG) == -1) {
+    if (listen(server_socket_fd, BACKLOG) == -1) {
         perror("listen");
+        exit(1);
+    }
+   
+    struct epoll_event ev, events[MAX_CLIENTS];
+    int epoll_fd =  epoll_create1(0);
+    if (epoll_fd == -1) {
+        perror("epoll_create1");
+        exit(1);
+    }
+
+    ev.events = EPOLLIN;
+    ev.data.fd = server_socket_fd;
+    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, server_socket_fd, &ev) == -1) {
+        perror("epoll_ctl: server_socket_fd");
         exit(1);
     }
 
@@ -176,33 +189,59 @@ int main(void) {
     socklen_t sin_size;
     char incoming_connection_details[INET6_ADDRSTRLEN]; // TODO: Rename these variables to relect function
     // tcp server loop
+    int nfds;
+    int conn_sock;
     while(1) {
         printf("loop start. about to accept connections...\n");
-        sin_size = sizeof their_addr;
-        new_fd = accept(sockfd, (struct sockaddr *) &their_addr, &sin_size);
-        if (new_fd == -1) {
-            perror("accept");
-            continue;
+
+        nfds = epoll_wait(epoll_fd, events, MAX_CLIENTS, -1);
+        if (nfds == -1) {
+            perror("epoll_wait");
+            exit(1);
         }
 
-        printf("accepted connection...\n");
+        for(int n = 0; n < nfds; n++) {
+            if (events[n].data.fd == server_socket_fd) {
+                printf("epoll detected event from server socket fd \n");
+                sin_size = sizeof their_addr;
+                conn_sock = accept(server_socket_fd, (struct sockaddr *) &their_addr, &sin_size);
+                if (conn_sock == -1) {
+                    perror("accept");
+                    continue;
+                }
+                printf("accepted new connection...\n");
+                // Set this connection to non blocking
+                int fcntl_return_value = fcntl(conn_sock, F_SETFL, O_NONBLOCK);
+                if (fcntl_return_value == -1) {
+                    perror("fcntl");
+                    exit(1);
+                }
+                ev.events = EPOLLIN | EPOLLET; // TODO: Look up what Edge Triggered means
+                ev.data.fd = conn_sock;
+                if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, conn_sock, &ev) == -1) {
+                    perror("epoll_ctl: conn_sock");
+                    exit(1);
+                }              
+            } else {
+                printf("epoll detected event from non server socket fd \n");
 
-        //Print out the detail of the accepted connection
-        // src needs struct struct in_addr for IPv4 addresses and struct in6_addr for IPv6 format
-        // dest char buffer must be at least INET6_ADDRSTRLEN size parameter needs to be at least length 
-        void * their_addr_inet_addr = (struct sockaddr *)&their_addr;
-        if (their_addr.ss_family == AF_INET) {
-            their_addr_inet_addr = &(((struct sockaddr_in *)&their_addr)->sin_addr);
-        } else {
-            their_addr_inet_addr = &(((struct sockaddr_in6 *)&their_addr)->sin6_addr); // TODO: add unit test for IPv6 addresses
+                sin_size = sizeof their_addr;
+
+                void * their_addr_inet_addr = (struct sockaddr *)&their_addr;
+                if (their_addr.ss_family == AF_INET) {
+                    their_addr_inet_addr = &(((struct sockaddr_in *)&their_addr)->sin_addr);
+                } else {
+                    their_addr_inet_addr = &(((struct sockaddr_in6 *)&their_addr)->sin6_addr); // TODO: add unit test for IPv6 addresses
+                }
+
+                inet_ntop(their_addr.ss_family, their_addr_inet_addr, incoming_connection_details, sizeof incoming_connection_details);
+                printf("incoming IP connection details: %s\n", incoming_connection_details);
+
+                handle_client_request(events[n].data.fd, incoming_connection_details);
+
+            }
+
         }
-
-        inet_ntop(their_addr.ss_family, their_addr_inet_addr, incoming_connection_details, sizeof incoming_connection_details);
-        printf("incoming IP connection details: %s\n", incoming_connection_details);
-
-        // TODO: Note: Spawning new thread for each request is not how Redis handles concurrency. This line is for educational purposes only
-        std::thread t1(handle_client_request, new_fd, incoming_connection_details);
-        t1.detach();
     }
 
     return 0;
