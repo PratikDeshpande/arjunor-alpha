@@ -13,6 +13,7 @@
 #include "eval.h" // needs to be added to VSCode include path to be part of intellisense. Also needs to be defined as a target in Makefile
 #include <vector>
 #include <sstream>
+#include <thread>
 
 #define PORT "7379"
 #define BACKLOG 10
@@ -94,6 +95,22 @@ void send_command(int new_fd, std::shared_ptr<cmd::RedisCommand> command) {
     }
 }
 
+// This function is called in a new thread for each client connection
+void handle_client_request(int new_fd, char* incoming_connection_details) {
+    while(1) {
+        std::shared_ptr<cmd::RedisCommand> command;
+        try {
+            command = read_command(new_fd);
+        } catch (std::invalid_argument& e) {
+            printf("Error reading command: %s\n", e.what());
+            close(new_fd);
+            printf("client session with address %s disconnected\n", incoming_connection_details);
+            break; // TODO: only break if its EOF character read
+        }
+        send_command(new_fd, command);
+    }
+}
+
 // TODO: Use Modern Logging library (ie boost, google, etc)
 // TODO: Configurable log levels
 // TODO: Use smart pointers | RAII (make sure all resources [memory, file handles, sockets, etc are owned by an object and returned to os])
@@ -105,7 +122,6 @@ void send_command(int new_fd, std::shared_ptr<cmd::RedisCommand> command) {
 // TODO: Create class for synchronous TCP Server
 int main(void) {
     printf("Starting ArjunorDB\n");
-    int concurrent_clients = 0;
 
     int sockfd, new_fd;
     struct addrinfo hints, *servinfo, *p;
@@ -171,8 +187,6 @@ int main(void) {
 
         printf("accepted connection...\n");
 
-        concurrent_clients++;
-
         //Print out the detail of the accepted connection
         // src needs struct struct in_addr for IPv4 addresses and struct in6_addr for IPv6 format
         // dest char buffer must be at least INET6_ADDRSTRLEN size parameter needs to be at least length 
@@ -185,22 +199,10 @@ int main(void) {
 
         inet_ntop(their_addr.ss_family, their_addr_inet_addr, incoming_connection_details, sizeof incoming_connection_details);
         printf("incoming IP connection details: %s\n", incoming_connection_details);
-        printf("number of clients is now %i\n", concurrent_clients);
 
-        // for loop for client session
-        while(1) {
-            std::shared_ptr<cmd::RedisCommand> command;
-            try {
-                command = read_command(new_fd);
-            } catch (std::invalid_argument& e) {
-                printf("Error reading command: %s\n", e.what());
-                close(new_fd);
-                concurrent_clients--;
-                printf("client session with address %s disconnected\n", incoming_connection_details);
-                break; // TODO: only break if its EOF character read
-            }
-            send_command(new_fd, command);
-        };
+        // TODO: Note: Spawning new thread for each request is not how Redis handles concurrency. This line is for educational purposes only
+        std::thread t1(handle_client_request, new_fd, incoming_connection_details);
+        t1.detach();
     }
 
     return 0;
