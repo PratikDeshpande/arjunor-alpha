@@ -59,6 +59,10 @@ std::shared_ptr<cmd::RedisCommand> read_command(int new_fd) {
     // TODO: extract to helper function to convert string to enum
     if (command_name == "PING") {
         command_name_enum = cmd::CommandName::Ping;
+    } else if (command_name == "SET") {
+        command_name_enum = cmd::CommandName::Set;
+    } else if (command_name == "GET") {
+        command_name_enum = cmd::CommandName::Get;
     } else {
         std::cout << "Error: Unknown command" << std::endl;
         throw std::invalid_argument("Error: Unknown command");

@@ -43,10 +43,32 @@ namespace eval {
 
     }
 
+    void eval_set(std::vector<std::string> arguments, int new_fd) {
+        if (arguments.size() != 2) { // TODO: Add support for TTL option
+            std::cout << "Error: Wrong number of arguments" << std::endl;
+            throw std::invalid_argument("ERR wrong number of arguments for 'set' command");
+        } else {
+            throw std::invalid_argument("Not implemented");
+        }
+    }
+
+    void eval_get(std::vector<std::string> arguments, int new_fd) {
+        if (arguments.size() != 1) {
+            std::cout << "Error: Wrong number of arguments" << std::endl;
+            throw std::invalid_argument("ERR wrong number of arguments for 'get' command");
+        } else {
+            throw std::invalid_argument("Not implemented");
+        }
+    }
+
     void eval_and_respond(std::shared_ptr<cmd::RedisCommand> command, int new_fd) {
 
         if (command->name == cmd::CommandName::Ping) {
             eval_ping(command->arguments, new_fd);
+        } else if (command->name == cmd::CommandName::Set) {
+            eval_set(command->arguments, new_fd);
+        } else if (command->name == cmd::CommandName::Get) {
+            eval_get(command->arguments, new_fd);
         } else {
             eval_ping(command->arguments, new_fd);
         }
