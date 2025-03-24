@@ -111,13 +111,15 @@ void handle_client_request(int new_fd, char* incoming_connection_details) {
 }
 
 // TODO: Use Modern Logging library (ie boost, google, etc)
-// TODO: Configurable log levels
+// TODO: Configurable log levels (Bonus, make log levels dynamically configurable)
 // TODO: Use smart pointers | RAII (make sure all resources [memory, file handles, sockets, etc are owned by an object and returned to os])
 // TODO: Retrieve port, backlog, etc from command line flags OR config OR DEFAULT
 // TODO: Support more than one client connection
 // TODO: Add unit tests for IPv6 logic
-// TODO: Make this cross platform (Windows)
+// TODO: Make this cross platform (Windows, Linux, MacOS)
+    // TODO: See if you can use the strategy pattern to abstract out the platform specific code (ie kqueue/kevent for io instead of epoll)
 // TODO: Find best practices for mixing C style Errors and C++ style Exceptions
+    // TODO: Use consistent error handling strategy
 // TODO: Create class for synchronous TCP Server
 int main(void) {
     printf("Starting ArjunorDB\n");
@@ -141,6 +143,10 @@ int main(void) {
         if ((server_socket_fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
             perror("server: socket");
             continue;
+        }
+        if (fcntl(server_socket_fd, F_SETFL, O_NONBLOCK) == -1) {
+            perror("fcntl");
+            exit(1);
         }
 
         if (setsockopt(server_socket_fd, SOL_SOCKET, SO_REUSEADDR, &socker_reuse_addr_flag, sizeof(int)) == -1) {
