@@ -2,9 +2,11 @@
 #include <sys/socket.h>
 #include <iostream>
 #include <sstream>
+#include <memory>
+#include <ctime>
 
 namespace eval {
-    void eval_ping(std::vector<std::string> arguments, int new_fd) {
+    void eval_ping(std::vector<std::string> arguments, int new_fd, std::shared_ptr<store::ObjectStore> object_store) {
 
         if (arguments.size() >= 2) {
             std::cout << "Error: Too many arguments" << std::endl;
@@ -43,7 +45,7 @@ namespace eval {
 
     }
 
-    void eval_set(std::vector<std::string> arguments, int new_fd) {
+    void eval_set(std::vector<std::string> arguments, int new_fd, std::shared_ptr<store::ObjectStore> object_store) {
         if (arguments.size() != 2) { // TODO: Add support for TTL option
             std::cout << "Error: Wrong number of arguments" << std::endl;
             throw std::invalid_argument("ERR wrong number of arguments for 'set' command");
@@ -52,7 +54,7 @@ namespace eval {
         }
     }
 
-    void eval_get(std::vector<std::string> arguments, int new_fd) {
+    void eval_get(std::vector<std::string> arguments, int new_fd, std::shared_ptr<store::ObjectStore> object_store) {
         if (arguments.size() != 1) {
             std::cout << "Error: Wrong number of arguments" << std::endl;
             throw std::invalid_argument("ERR wrong number of arguments for 'get' command");
@@ -61,16 +63,16 @@ namespace eval {
         }
     }
 
-    void eval_and_respond(std::shared_ptr<cmd::RedisCommand> command, int new_fd) {
+    void eval_and_respond(std::shared_ptr<cmd::RedisCommand> command, int new_fd, std::shared_ptr<store::ObjectStore> object_store) {
 
         if (command->name == cmd::CommandName::Ping) {
-            eval_ping(command->arguments, new_fd);
+            eval_ping(command->arguments, new_fd, object_store);
         } else if (command->name == cmd::CommandName::Set) {
-            eval_set(command->arguments, new_fd);
+            eval_set(command->arguments, new_fd, object_store);
         } else if (command->name == cmd::CommandName::Get) {
-            eval_get(command->arguments, new_fd);
+            eval_get(command->arguments, new_fd, object_store);
         } else {
-            eval_ping(command->arguments, new_fd);
+            eval_ping(command->arguments, new_fd, object_store);
         }
 
 

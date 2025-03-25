@@ -91,9 +91,9 @@ void send_error(int new_fd, std::string error_message) {
     printf("bytes sent: %li\n", bytes_sent);
 }
 
-void send_command(int new_fd, std::shared_ptr<cmd::RedisCommand> command) {
+void send_command(int new_fd, std::shared_ptr<cmd::RedisCommand> command, std::shared_ptr<store::ObjectStore> object_store) {
     try {
-        eval::eval_and_respond(command, new_fd);
+        eval::eval_and_respond(command, new_fd, object_store);
     } catch (std::invalid_argument& e) {
         auto error_message = std::string(e.what());
         printf("Error sending command: %s\n", e.what());
@@ -101,7 +101,7 @@ void send_command(int new_fd, std::shared_ptr<cmd::RedisCommand> command) {
     }
 }
 
-void handle_client_request(int new_fd, char* incoming_connection_details) {
+void handle_client_request(int new_fd, char* incoming_connection_details, std::shared_ptr<store::ObjectStore> object_store) {
     std::shared_ptr<cmd::RedisCommand> command;
     try {
         command = read_command(new_fd);
@@ -111,8 +111,11 @@ void handle_client_request(int new_fd, char* incoming_connection_details) {
         printf("client session with address %s disconnected\n", incoming_connection_details);
         return;
     }
-    send_command(new_fd, command);
+    send_command(new_fd, command, object_store);
 }
+
+// TODO: This should be a singleton available from anywhere in the program. Find best practices on how to do this
+std::shared_ptr<store::ObjectStore> object_store;
 
 // TODO: Use Modern Logging library (ie boost, google, etc)
 // TODO: Configurable log levels (Bonus, make log levels dynamically configurable)
@@ -127,6 +130,8 @@ void handle_client_request(int new_fd, char* incoming_connection_details) {
 // TODO: Create class for synchronous TCP Server
 int main(void) {
     printf("Starting ArjunorDB\n");
+
+    object_store = std::make_shared<store::ObjectStore>();
 
     int server_socket_fd;
     struct addrinfo hints, *servinfo, *p;
@@ -247,7 +252,7 @@ int main(void) {
                 inet_ntop(their_addr.ss_family, their_addr_inet_addr, incoming_connection_details, sizeof incoming_connection_details);
                 printf("incoming IP connection details: %s\n", incoming_connection_details);
 
-                handle_client_request(events[n].data.fd, incoming_connection_details);
+                handle_client_request(events[n].data.fd, incoming_connection_details, object_store);
 
             }
 
