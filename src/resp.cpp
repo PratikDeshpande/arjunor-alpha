@@ -129,4 +129,30 @@ std::pair<std::shared_ptr<ProtocolMessage>, int> decode(const std::vector<std::b
     auto result = decode_one(buffer);
     return result;
 }
+
+std::vector<std::byte> encode_simple_string(const std::string& data) {
+    std::ostringstream response_stream;
+    response_stream << "+" << data << "\r\n";
+    std::string response = response_stream.str();
+    auto byte_string = reinterpret_cast<const std::byte*>(response.c_str());
+    std::vector<std::byte> byte_vector(byte_string, byte_string + response.size());
+    return byte_vector;
+}
+
+std::vector<std::byte> encode_bulk_string(const std::string& data) {
+    std::ostringstream response_stream;
+    response_stream << "$" << data.size() << "\r\n" << data << "\r\n";
+    std::string response = response_stream.str();
+    auto byte_string = reinterpret_cast<const std::byte*>(response.c_str());
+    std::vector<std::byte> byte_vector(byte_string, byte_string + response.size());
+    return byte_vector;
+}
+
+std::vector<std::byte> encode_null() {
+    std::string response = "_\r\n";
+    auto byte_string = reinterpret_cast<const std::byte*>(response.c_str());
+    std::vector<std::byte> byte_vector(byte_string, byte_string + response.size());
+    return byte_vector;
+}
+
 }
