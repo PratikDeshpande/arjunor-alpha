@@ -4,6 +4,7 @@
 #include <vector>
 #include <variant>
 #include <memory>
+#include <sstream>
 
 // TODO: Find a common response interface/type that represents a union of all types returned by read_* functions
 //  so that byte streams can be processed in a chain / (ie composition)
@@ -31,6 +32,13 @@ namespace resp {
     std::pair<std::shared_ptr<ProtocolMessage>, int> decode_one(const std::vector<std::byte>& buffer);
 
     std::pair<std::shared_ptr<ProtocolMessage>, int> decode(const std::vector<std::byte>& buffer);
+
+    // Encode functions
+    std::vector<std::byte> encode_simple_string(const std::string& data);
+    std::vector<std::byte> encode_bulk_string(const std::string& data);
+    std::vector<std::byte> encode_null();
+
+
 
 
 
