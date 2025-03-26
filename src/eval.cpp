@@ -1,10 +1,4 @@
 #include "eval.h"
-#include <sys/socket.h>
-#include <iostream>
-#include <sstream>
-#include <memory>
-#include <ctime>
-#include "resp.h"
 
 namespace eval {
     void eval_ping(std::vector<std::string> arguments, int new_fd, std::shared_ptr<store::ObjectStore> object_store) {
