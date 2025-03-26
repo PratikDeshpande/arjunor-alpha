@@ -1,7 +1,7 @@
 
 
 arjunor-alpha-server: 
-	g++ -o arjunor-alpha-server src/server.cpp src/resp.cpp src/eval.cpp src/store.cpp
+	g++ -o arjunor-alpha-server src/server.cpp src/resp.cpp src/eval.cpp src/store.cpp src/comm.cpp
 
 test:
 	g++ -I h -pthread -o test tests/test_resp.cpp src/resp.cpp /usr/local/lib/libgtest.a
