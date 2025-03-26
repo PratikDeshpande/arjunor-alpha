@@ -20,7 +20,6 @@ std::shared_ptr<store::ObjectStore> object_store;
 // TODO: Configurable log levels (Bonus, make log levels dynamically configurable)
 // TODO: Use smart pointers | RAII (make sure all resources [memory, file handles, sockets, etc are owned by an object and returned to os])
 // TODO: Retrieve port, backlog, etc from command line flags OR config OR DEFAULT
-// TODO: Support more than one client connection
 // TODO: Add unit tests for IPv6 logic
 // TODO: Make this cross platform (Windows, Linux, MacOS)
     // TODO: See if you can use the strategy pattern to abstract out the platform specific code (ie kqueue/kevent for io instead of epoll)

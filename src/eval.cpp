@@ -63,7 +63,6 @@ namespace eval {
                 auto object_data = object->data;
                 std::string data_string(  reinterpret_cast<const char*>(object_data.data()), reinterpret_cast<const char*>(object_data.data()  + object_data.size() ));
 
-                // TODO: should all values be returned as bulk strings?
                 std::vector<std::byte> response_byte_vector = resp::encode_bulk_string(data_string);
                 auto bytes_sent = send(new_fd, response_byte_vector.data(), response_byte_vector.size(), 0);
                 if (bytes_sent <= 0) {

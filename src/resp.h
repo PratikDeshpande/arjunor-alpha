@@ -6,9 +6,6 @@
 #include <memory>
 #include <sstream>
 
-// TODO: Find a common response interface/type that represents a union of all types returned by read_* functions
-//  so that byte streams can be processed in a chain / (ie composition)
-//  Possible options: response struct, union struct, etc
 namespace resp {
 
     enum ProtocolMessageType { SimpleString, SimpleError, Integer, BulkString, Array, Null, Boolean, Double, BigNumber, BulkError, VerbatimString, Map, Attribute, Set, Push };
