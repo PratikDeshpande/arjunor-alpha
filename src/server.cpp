@@ -1,118 +1,17 @@
-#include <netdb.h> // struct addrinfo, getaddrinfo, gai_strerror, freeaddrinfo
+#include <netdb.h>
 #include <unistd.h>
-#include <sys/socket.h> // socket, setsockopt, bind, accept, sockaddr_storage, socklen_t, address families constants
-#include <string.h> // memset
-#include <arpa/inet.h>  // inet_ntop
-#include <sys/types.h>
-#include <netinet/in.h> // INET6_ADDRSTRLEN
-#include <stdio.h>  // fprintf, perror
-#include <stdlib.h> // exit
-#include <cstddef> // std::byte
-#include <iostream>
-#include "resp.h" // needs to be added to VSCode include path to be part of intellisense. Also needs to be defined as a target in Makefile
-#include "eval.h" // needs to be added to VSCode include path to be part of intellisense. Also needs to be defined as a target in Makefile
-#include <vector>
-#include <sstream>
+#include <string.h>
+#include <arpa/inet.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <sys/epoll.h>
+#include <unistd.h>
 #include <fcntl.h>
+#include "comm.h"
 
 #define PORT "7379"
 #define BACKLOG 10
 #define MAX_CLIENTS 20000
-
-
-// Read from client. This is a blocking system call
-std::shared_ptr<cmd::RedisCommand> read_command(int new_fd) {
-    std::byte buffer[512]; // TODO: If bigger than 512 bytes, loop until you read EOF. Clear memory?
-    auto bytes_read = recv(new_fd, buffer, 512, 0);
-    printf("bytes received: %li\n", bytes_read);
-    if (bytes_read <= 0) {
-        std::cout << "Error reading incoming bytes" << std::endl;
-        throw std::invalid_argument("Error: No data in buffer");
-    }
-    std::vector<std::byte> command(buffer, buffer + bytes_read);
-    memset(&buffer, 0, sizeof buffer);
-    std::string command_string(reinterpret_cast<const char*>(command.data()), command.size());
-    std::cout << "Incoming command: " << command_string << std::endl;
-
-    // TODO: Extract to helper function
-    auto protocol_message = resp::decode(command).first;
-    if (protocol_message->protocol_message_type != resp::ProtocolMessageType::Array) {
-        std::cout << "Error: Expected Array type" << std::endl;
-        throw std::invalid_argument("Error: Expected Array type");
-    }
-    auto data = protocol_message->data;
-    auto vectors = std::get<std::vector<std::shared_ptr<resp::ProtocolMessage>>>(data);
-    if (vectors.size() == 0) {
-        std::cout << "Error: Expected at least one element in array" << std::endl;
-        throw std::invalid_argument("Error: Expected at least one element in array");
-    }
-    for (auto vec: vectors) {
-        if (vec->protocol_message_type != resp::ProtocolMessageType::BulkString) {
-            std::cout << "Error: Expected BulkString type" << std::endl;
-            throw std::invalid_argument("Error: Expected BulkString type");
-        }
-        std::cout << "bulk string result: " << std::get<std::string>(vec->data) << std::endl;
-    }
-    auto command_name = std::get<std::string>(vectors[0]->data);
-    cmd::CommandName command_name_enum;
-    // TODO: extract to helper function to convert string to enum
-    if (command_name == "PING") {
-        command_name_enum = cmd::CommandName::Ping;
-    } else if (command_name == "SET") {
-        command_name_enum = cmd::CommandName::Set;
-    } else if (command_name == "GET") {
-        command_name_enum = cmd::CommandName::Get;
-    } else {
-        std::cout << "Error: Unknown command" << std::endl;
-        throw std::invalid_argument("Error: Unknown command");
-    }
-
-    std::vector<std::string> arguments;
-    for(int i = 1; i < vectors.size(); i++) {
-        arguments.push_back(std::get<std::string>(vectors[i]->data));
-    }
-    std::shared_ptr<cmd::RedisCommand> result = std::make_shared<cmd::RedisCommand>();
-    result->name = command_name_enum;
-    result->arguments = arguments;
-    return result;
-}
-
-void send_error(int new_fd, std::string error_message) {
-    std::ostringstream error_message_stream;
-    error_message_stream << "-" << error_message << "\r\n";
-    std::string response = error_message_stream.str();
-
-
-    auto char_string = response.c_str();
-    auto byte_string = (std::byte*)char_string;
-    printf("error message size: %li\n", response.size());
-    auto bytes_sent = send(new_fd, byte_string, response.size(), 0);
-    printf("bytes sent: %li\n", bytes_sent);
-}
-
-void send_command(int new_fd, std::shared_ptr<cmd::RedisCommand> command, std::shared_ptr<store::ObjectStore> object_store) {
-    try {
-        eval::eval_and_respond(command, new_fd, object_store);
-    } catch (std::invalid_argument& e) {
-        auto error_message = std::string(e.what());
-        printf("Error sending command: %s\n", e.what());
-        send_error(new_fd, error_message);
-    }
-}
-
-void handle_client_request(int new_fd, char* incoming_connection_details, std::shared_ptr<store::ObjectStore> object_store) {
-    std::shared_ptr<cmd::RedisCommand> command;
-    try {
-        command = read_command(new_fd);
-    } catch (std::invalid_argument& e) {
-        printf("Error reading command: %s\n", e.what());
-        close(new_fd);
-        printf("client session with address %s disconnected\n", incoming_connection_details);
-        return;
-    }
-    send_command(new_fd, command, object_store);
-}
 
 // TODO: This should be a singleton available from anywhere in the program. Find best practices on how to do this
 std::shared_ptr<store::ObjectStore> object_store;
@@ -198,17 +97,13 @@ int main(void) {
         exit(1);
     }
 
-    printf("server: waiting for connections...\n");
 
     struct sockaddr_storage their_addr; // Type used to encapsulate address info for both IPv4 and IPv6 sockets. Inter castable pointer with sockaddr*
     socklen_t sin_size;
     char incoming_connection_details[INET6_ADDRSTRLEN]; // TODO: Rename these variables to relect function
-    // tcp server loop
     int nfds;
     int conn_sock;
     while(1) {
-        printf("loop start. about to accept connections...\n");
-
         nfds = epoll_wait(epoll_fd, events, MAX_CLIENTS, -1);
         if (nfds == -1) {
             perror("epoll_wait");
@@ -217,15 +112,12 @@ int main(void) {
 
         for(int n = 0; n < nfds; n++) {
             if (events[n].data.fd == server_socket_fd) {
-                printf("epoll detected event from server socket fd \n");
                 sin_size = sizeof their_addr;
                 conn_sock = accept(server_socket_fd, (struct sockaddr *) &their_addr, &sin_size);
                 if (conn_sock == -1) {
                     perror("accept");
                     continue;
                 }
-                printf("accepted new connection...\n");
-                // Set this connection to non blocking
                 int fcntl_return_value = fcntl(conn_sock, F_SETFL, O_NONBLOCK);
                 if (fcntl_return_value == -1) {
                     perror("fcntl");
@@ -238,8 +130,6 @@ int main(void) {
                     exit(1);
                 }              
             } else {
-                printf("epoll detected event from non server socket fd \n");
-
                 sin_size = sizeof their_addr;
 
                 void * their_addr_inet_addr = (struct sockaddr *)&their_addr;
@@ -250,9 +140,9 @@ int main(void) {
                 }
 
                 inet_ntop(their_addr.ss_family, their_addr_inet_addr, incoming_connection_details, sizeof incoming_connection_details);
-                printf("incoming IP connection details: %s\n", incoming_connection_details);
+                //printf("incoming IP connection details: %s\n", incoming_connection_details);
 
-                handle_client_request(events[n].data.fd, incoming_connection_details, object_store);
+                comm::handle_client_request(events[n].data.fd, incoming_connection_details, object_store);
 
             }
 
