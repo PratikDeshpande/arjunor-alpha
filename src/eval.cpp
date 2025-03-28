@@ -82,6 +82,18 @@ namespace eval {
         }
     }
 
+    void eval_vectorindex(std::vector<std::string> arguments, int new_fd, std::shared_ptr<store::ObjectStore> object_store) {
+        throw std::invalid_argument("not implemented");
+    }
+
+    void eval_upsert(std::vector<std::string> arguments, int new_fd, std::shared_ptr<store::ObjectStore> object_store) {
+        throw std::invalid_argument("not implemented");
+    }
+
+    void eval_search(std::vector<std::string> arguments, int new_fd, std::shared_ptr<store::ObjectStore> object_store) {
+        throw std::invalid_argument("not implemented");
+    }
+
     void eval_and_respond(std::shared_ptr<cmd::RedisCommand> command, int new_fd, std::shared_ptr<store::ObjectStore> object_store) {
 
         if (command->name == cmd::CommandName::Ping) {
@@ -90,6 +102,12 @@ namespace eval {
             eval_set(command->arguments, new_fd, object_store);
         } else if (command->name == cmd::CommandName::Get) {
             eval_get(command->arguments, new_fd, object_store);
+        } else if (command->name == cmd::CommandName::VectorIndex) {
+            eval_vectorindex(command->arguments, new_fd, object_store);
+        } else if (command->name == cmd::CommandName::Upsert) {
+            eval_upsert(command->arguments, new_fd, object_store);
+        } else if (command->name == cmd::CommandName::Search) {
+            eval_search(command->arguments, new_fd, object_store);
         } else {
             eval_ping(command->arguments, new_fd, object_store);
         }
