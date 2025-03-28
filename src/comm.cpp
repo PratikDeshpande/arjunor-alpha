@@ -43,6 +43,12 @@ std::shared_ptr<cmd::RedisCommand> read_command(int new_fd) {
         command_name_enum = cmd::CommandName::Set;
     } else if (command_name == "GET") {
         command_name_enum = cmd::CommandName::Get;
+    } else if (command_name == "VECTORINDEX") {
+        command_name_enum = cmd::CommandName::VectorIndex;
+    } else if (command_name == "UPSERT") {
+        command_name_enum = cmd::CommandName::Upsert;
+    } else if (command_name == "SEARCH") {
+        command_name_enum = cmd::CommandName::Search;
     } else {
         std::cout << "Error: Unknown command" << std::endl;
         throw std::invalid_argument("Error: Unknown command");
@@ -86,6 +92,7 @@ void handle_client_request(int new_fd, char* incoming_connection_details, std::s
     try {
         command = read_command(new_fd);
     } catch (std::invalid_argument& e) {
+        // TODO: ERROR: Keep receiving messages after socket is closed
         printf("Error reading command: %s\n", e.what());
         close(new_fd);
         printf("client session with address %s disconnected\n", incoming_connection_details);
