@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 project(arjunor-alpha)
 
 # Set C++ standard
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Add source files for the main executable
@@ -18,12 +18,12 @@ set(SERVER_SOURCES
 add_executable(arjunor-alpha-server ${SERVER_SOURCES})
 
 # Add include directories
-target_include_directories(arjunor-alpha-server PRIVATE src)
+#target_include_directories(arjunor-alpha-server PRIVATE src)
 
 # Add test executable
 add_executable(test tests/test_resp.cpp src/resp.cpp)
 target_include_directories(test PRIVATE src)
-target_link_libraries(test PRIVATE pthread gtest)
+target_link_libraries(test PRIVATE pthread /usr/local/lib/libgtest.a)
 
 # Add debug configuration
 set(CMAKE_BUILD_TYPE Debug)

@@ -6,24 +6,29 @@ Experimental Redis Drop In Database
 
 ## Ubuntu Linux
 
-Compile:
+Create Build Directory:
+```
+mkdir build
+cd build
+```
+
+Generate Build Files
+```
+cmake ..
+```
+
+Build Project
 ```
 make
+```
+
+Clean:
+```
+make clean-all
 ```
 
 Run:
 ```
 ./arjunor-alpha-server
-```
-
-Test:
-```
-make test
-./test
-```
-
-Clean:
-```
-make clean
 ```
 
