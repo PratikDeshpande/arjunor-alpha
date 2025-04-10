@@ -122,11 +122,6 @@ namespace eval {
     }
 
     /*
-
-
-    // for each index, create {}        // Index is a session
-        // within an index you have a name space (analogous to a workspace)
-         //     upert upsert vectors into workspace
     
     index.upsert(
   vectors=[
@@ -248,25 +243,6 @@ namespace eval {
         user_params << "namespace: " << name_space << " vector: " << vector << " top_k: " << top_k << std::endl;
         std::string user_params_log = user_params.str();
         std::cout << user_params_log << std::endl;
-
-
-        // TODO: initialize namespace if not initialized
-        //      - load all vectors into memory
-        //      - for vector in vectors, perform euclidean distance calculation
-        //      - return top k vectors
-
-        struct multimedia_vector {
-            std::string id;
-            std::string metadata;
-            //float score;
-            std::vector<float> values;
-        };
-
-        // map: id: score. find the one with highest score
-        //std::unordered_map<std::string, float> map;
-
-
-        //std::vector<float> vector_floats;
 
         // figure out how to search vectors in memory
         // for now, just return OK
