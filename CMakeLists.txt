@@ -18,7 +18,7 @@ set(SERVER_SOURCES
 add_executable(arjunor-alpha-server ${SERVER_SOURCES})
 
 # Add include directories
-#target_include_directories(arjunor-alpha-server PRIVATE src)
+target_include_directories(arjunor-alpha-server PRIVATE src)
 
 # Add test executable
 add_executable(test tests/test_resp.cpp src/resp.cpp)
